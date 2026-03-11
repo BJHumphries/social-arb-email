@@ -1,55 +1,51 @@
 import os
-import praw
+import requests
 from github import Github
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from google.cloud import secretmanager
 
 # -------- CONFIG --------
 TOP_N = 20
 TICKERS = ["RKLB","ASTS","NVIDIA","IONQ","BLACKSKY"]  # Example tickers
 SUBREDDITS = ['stocks','wallstreetbets','SpaceX','AI']
 
-# -------- HELPER: Get secret from Secret Manager --------
-def get_secret(secret_name):
-    client = secretmanager.SecretManagerServiceClient()
-    project_id = os.environ['GCP_PROJECT']
-    name = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
-    response = client.access_secret_version(request={"name": name})
-    return response.payload.data.decode("UTF-8")
+# -------- ENVIRONMENT VARIABLES --------
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+EMAIL_FROM = os.environ.get("EMAIL_FROM")
+EMAIL_TO = os.environ.get("EMAIL_TO")
+EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD")
 
-# Pull secrets
-REDDIT_CLIENT_ID = get_secret("REDDIT_CLIENT_ID")
-REDDIT_CLIENT_SECRET = get_secret("REDDIT_CLIENT_SECRET")
-REDDIT_USER_AGENT = "asym_trader"
-GITHUB_TOKEN = get_secret("GITHUB_TOKEN")
-EMAIL_FROM = get_secret("EMAIL_FROM")
-EMAIL_TO = get_secret("EMAIL_TO")
-EMAIL_PASSWORD = get_secret("EMAIL_PASSWORD")
-
-# -------- FETCH SIGNALS --------
+# -------- FETCH REDDIT SIGNALS (Pushshift workaround) --------
 def fetch_reddit_signals():
-    reddit = praw.Reddit(client_id=REDDIT_CLIENT_ID,
-                         client_secret=REDDIT_CLIENT_SECRET,
-                         user_agent=REDDIT_USER_AGENT)
     signals = {t: {"reddit":0} for t in TICKERS}
     for sub in SUBREDDITS:
-        for post in reddit.subreddit(sub).hot(limit=100):
-            for t in TICKERS:
-                if t in post.title.upper() or t in post.selftext.upper():
-                    signals[t]["reddit"] += 1
+        url = f"https://api.pushshift.io/reddit/search/submission/?subreddit={sub}&size=100"
+        try:
+            data = requests.get(url).json().get('data', [])
+            for post in data:
+                title = post.get('title', '').upper()
+                selftext = post.get('selftext', '').upper()
+                for t in TICKERS:
+                    if t in title or t in selftext:
+                        signals[t]["reddit"] += 1
+        except Exception as e:
+            print(f"Error fetching Reddit for {sub}: {e}")
     return signals
 
+# -------- FETCH GITHUB SIGNALS --------
 def fetch_github_signals():
     g = Github(GITHUB_TOKEN)
     signals = {t: {"github":0} for t in TICKERS}
     for t in ["NVIDIA","IONQ"]:  # Example AI/Quantum
-        repos = g.search_repositories(query=f"{t} topic:ai")
-        signals[t]["github"] = repos.totalCount
+        try:
+            repos = g.search_repositories(query=f"{t} topic:ai")
+            signals[t]["github"] = repos.totalCount
+        except Exception as e:
+            print(f"Error fetching GitHub for {t}: {e}")
     return signals
 
-# Placeholder functions for TikTok, YouTube, VC APIs
+# -------- PLACEHOLDER FUNCTIONS --------
 def fetch_tiktok_signals():
     return {t: {"tiktok":0} for t in TICKERS}
 def fetch_youtube_signals():
@@ -81,9 +77,13 @@ def send_email(top_tickers):
     html += "</table>"
     msg.attach(MIMEText(html, 'html'))
 
-    with smtplib.SMTP_SSL('smtp.gmail.com',465) as server:
-        server.login(EMAIL_FROM, EMAIL_PASSWORD)
-        server.sendmail(EMAIL_FROM, EMAIL_TO, msg.as_string())
+    try:
+        with smtplib.SMTP_SSL('smtp.gmail.com',465) as server:
+            server.login(EMAIL_FROM, EMAIL_PASSWORD)
+            server.sendmail(EMAIL_FROM, EMAIL_TO, msg.as_string())
+            print("Email sent successfully!")
+    except Exception as e:
+        print(f"Failed to send email: {e}")
 
 # -------- MAIN FUNCTION --------
 def main(event=None, context=None):
@@ -103,4 +103,4 @@ def main(event=None, context=None):
     scored = calculate_score(all_signals)
     top_tickers = dict(sorted(scored.items(), key=lambda x:x[1]['score'], reverse=True)[:TOP_N])
     send_email(top_tickers)
-    return "Email sent successfully!"
+    return "Email process completed!"
