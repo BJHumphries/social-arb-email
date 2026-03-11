@@ -11,7 +11,7 @@ TICKERS = ["RKLB","ASTS","NVIDIA","IONQ","BLACKSKY"]
 SUBREDDITS = ['stocks','wallstreetbets','SpaceX','AI']
 
 # -------- ENVIRONMENT VARIABLES --------
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+GITHUB_TOKEN = os.environ.get("GH_TOKEN")
 EMAIL_FROM = os.environ.get("EMAIL_FROM")
 EMAIL_TO = os.environ.get("EMAIL_TO")
 EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD")
