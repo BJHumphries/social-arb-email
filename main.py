@@ -7,7 +7,7 @@ from email.mime.text import MIMEText
 
 # -------- CONFIG --------
 TOP_N = 20
-TICKERS = ["RKLB","ASTS","NVIDIA","IONQ","BLACKSKY"]  # Example tickers
+TICKERS = ["RKLB","ASTS","NVIDIA","IONQ","BLACKSKY"]
 SUBREDDITS = ['stocks','wallstreetbets','SpaceX','AI']
 
 # -------- ENVIRONMENT VARIABLES --------
@@ -37,7 +37,7 @@ def fetch_reddit_signals():
 def fetch_github_signals():
     g = Github(GITHUB_TOKEN)
     signals = {t: {"github":0} for t in TICKERS}
-    for t in ["NVIDIA","IONQ"]:  # Example AI/Quantum
+    for t in ["NVIDIA","IONQ"]:
         try:
             repos = g.search_repositories(query=f"{t} topic:ai")
             signals[t]["github"] = repos.totalCount
