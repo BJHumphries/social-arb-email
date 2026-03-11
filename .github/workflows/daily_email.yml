@@ -3,6 +3,7 @@ name: Daily Asymmetric Trade Email
 on:
   schedule:
     - cron: '30 12 * * 1-5'  # 8:30 AM ET
+    workflow_dispatch:          # <-- Add this
 
 jobs:
   send-email:
