@@ -2,14 +2,16 @@ name: Daily Asymmetric Trade Email
 
 on:
   schedule:
-    - cron: '30 12 * * 1-5'  # 8:30 AM ET
-    workflow_dispatch:          # <-- Add this
+    - cron: '30 12 * * 1-5'  # 8:30 AM ET Mon–Fri
+  workflow_dispatch:          # <-- allows manual run
 
 jobs:
   send-email:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -18,7 +20,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Run script
@@ -26,5 +28,5 @@ jobs:
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: python main.py
