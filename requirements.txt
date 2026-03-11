@@ -1,4 +1,2 @@
-praw
-PyGithub
-google-cloud-secret-manager
 requests
+PyGithub
