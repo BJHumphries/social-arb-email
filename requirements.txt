@@ -1,0 +1,4 @@
+praw
+PyGithub
+google-api-python-client
+requests
