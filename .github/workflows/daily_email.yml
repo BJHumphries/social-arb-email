@@ -1,25 +1,19 @@
-name: Send Trade Ideas Email
+name: Daily Trade Email
 
 on:
   schedule:
-    - cron: '0 13 * * 1-5'
+    - cron: '0 15 * * *'  # Every day at 15:00 UTC
   workflow_dispatch:
 
 jobs:
   send-email:
     runs-on: ubuntu-latest
 
-    env:
-      EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
-      EMAIL_TO: ${{ secrets.EMAIL_TO }}
-      EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-      GH_TOKEN: ${{ secrets.GH_TOKEN }}
-
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Setup Python 3.11
+      - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: 3.11
@@ -27,14 +21,17 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Use the same Python executable to install packages
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
-          # Download TextBlob corpora
           python -m textblob.download_corpora
 
-      - name: List Python packages (for debug)
-        run: python -m pip list
-
       - name: Run main.py
+        env:
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
+          REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
+          REDDIT_USER_AGENT: ${{ secrets.REDDIT_USER_AGENT }}
         run: python main.py
