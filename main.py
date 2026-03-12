@@ -3,10 +3,10 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from textblob import TextBlob
-import yfinance as yf
-from youtube_transcript_api import YouTubeTranscriptApi
-import praw
 import requests
+import praw
+import tweepy
+from youtube_transcript_api import YouTubeTranscriptApi
 
 # Environment variables
 EMAIL_FROM = os.getenv("EMAIL_FROM")
@@ -15,93 +15,86 @@ EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 REDDIT_CLIENT_ID = os.getenv("REDDIT_CLIENT_ID")
 REDDIT_CLIENT_SECRET = os.getenv("REDDIT_CLIENT_SECRET")
 REDDIT_USER_AGENT = os.getenv("REDDIT_USER_AGENT")
+TWITTER_BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN")
 
-def fetch_reddit_stock_mentions(subreddit="stocks", limit=10):
+def send_email(subject: str, body: str):
+    """Send an email via SMTP."""
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_FROM
+        msg['To'] = EMAIL_TO
+        msg['Subject'] = subject
+        msg.attach(MIMEText(body, 'plain'))
+
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+            server.login(EMAIL_FROM, EMAIL_PASSWORD)
+            server.send_message(msg)
+
+        print("Email sent successfully!")
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+
+# ------------------- Social Signal Functions -------------------
+
+def fetch_reddit_signals(subreddit_name="stocks", limit=5):
     reddit = praw.Reddit(client_id=REDDIT_CLIENT_ID,
                          client_secret=REDDIT_CLIENT_SECRET,
                          user_agent=REDDIT_USER_AGENT)
-    posts = reddit.subreddit(subreddit).hot(limit=limit)
-    mentions = []
-    for post in posts:
-        if '$' in post.title:
-            mentions.append(post.title)
-    return mentions
+    signals = []
+    for submission in reddit.subreddit(subreddit_name).hot(limit=limit):
+        text = f"{submission.title}\n{submission.selftext}"
+        sentiment = TextBlob(text).sentiment.polarity
+        signals.append({"source": "Reddit", "title": submission.title, "sentiment": sentiment})
+    return signals
 
-def fetch_youtube_transcripts(keywords, max_results=3):
-    transcripts = []
-    for keyword in keywords:
-        # Placeholder: search videos via YouTube API or use saved video IDs
-        # Example with YouTube Data API omitted for brevity
-        video_id = "dQw4w9WgXcQ"  # Replace with real search result
-        try:
-            t = YouTubeTranscriptApi.get_transcript(video_id)
-            text = " ".join([x['text'] for x in t])
-            transcripts.append(f"{keyword}:\n{text[:500]}...")  # Limit snippet
-        except Exception as e:
-            transcripts.append(f"{keyword}: Transcript not available")
-    return transcripts
+def fetch_twitter_signals(query="#stocks OR #investing", max_results=5):
+    client = tweepy.Client(bearer_token=TWITTER_BEARER_TOKEN)
+    tweets = client.search_recent_tweets(query=query, max_results=max_results)
+    signals = []
+    if tweets.data:
+        for tweet in tweets.data:
+            text = tweet.text
+            sentiment = TextBlob(text).sentiment.polarity
+            signals.append({"source": "Twitter", "text": text, "sentiment": sentiment})
+    return signals
 
-def analyze_sentiment(texts):
-    analyzed = []
-    for t in texts:
-        blob = TextBlob(t)
-        analyzed.append((t, blob.sentiment.polarity))
-    return analyzed
+def fetch_youtube_transcript(video_id):
+    try:
+        transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
+        full_text = " ".join([t['text'] for t in transcript_list])
+        sentiment = TextBlob(full_text).sentiment.polarity
+        return {"video_id": video_id, "text": full_text, "sentiment": sentiment}
+    except Exception as e:
+        print(f"Failed to fetch transcript for {video_id}: {e}")
+        return None
 
-def fetch_stock_data(tickers):
-    data = {}
-    for t in tickers:
-        try:
-            stock = yf.Ticker(t.replace('$',''))
-            info = stock.info
-            data[t] = f"Price: {info.get('currentPrice', 'N/A')}, Change: {info.get('regularMarketChangePercent', 'N/A')}%"
-        except Exception as e:
-            data[t] = "Data unavailable"
-    return data
-
-def send_email(subject, body):
-    msg = MIMEMultipart()
-    msg['From'] = EMAIL_FROM
-    msg['To'] = EMAIL_TO
-    msg['Subject'] = subject
-    msg.attach(MIMEText(body, 'plain'))
-
-    with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-        server.login(EMAIL_FROM, EMAIL_PASSWORD)
-        server.send_message(msg)
-
-    print("Email sent!")
+# ------------------- Main Workflow -------------------
 
 def main():
-    # 1. Fetch Reddit stock mentions
-    mentions = fetch_reddit_stock_mentions(limit=10)
+    email_subject = "Daily Trade Ideas - Social Signals"
+    body = "Here are the top signals and trade ideas:\n\n"
 
-    # 2. Analyze sentiment
-    sentiment = analyze_sentiment(mentions)
+    # Reddit signals
+    reddit_signals = fetch_reddit_signals()
+    body += "Reddit Signals:\n"
+    for s in reddit_signals:
+        body += f"- {s['title']} (Sentiment: {s['sentiment']:.2f})\n"
 
-    # 3. Get stock tickers from mentions
-    tickers = [m.split()[0] for m, _ in sentiment if m.startswith('$')]
+    # Twitter signals
+    twitter_signals = fetch_twitter_signals()
+    body += "\nTwitter Signals:\n"
+    for s in twitter_signals:
+        body += f"- {s['text']} (Sentiment: {s['sentiment']:.2f})\n"
 
-    # 4. Fetch stock data
-    stock_info = fetch_stock_data(tickers)
+    # Example YouTube video IDs (replace with dynamic discovery if desired)
+    youtube_ids = ["dQw4w9WgXcQ"]  # Replace with actual stock-related videos
+    body += "\nYouTube Transcripts:\n"
+    for vid in youtube_ids:
+        transcript = fetch_youtube_transcript(vid)
+        if transcript:
+            body += f"- Video {vid} Sentiment: {transcript['sentiment']:.2f}\n"
 
-    # 5. Fetch YouTube transcripts for tickers
-    transcripts = fetch_youtube_transcripts(tickers)
-
-    # 6. Build email content
-    email_body = "Daily Trade Ideas\n\n"
-    email_body += "Reddit Mentions & Sentiment:\n"
-    for m, s in sentiment:
-        email_body += f"{m} - Sentiment: {s:.2f}\n"
-    email_body += "\nStock Info:\n"
-    for t, info in stock_info.items():
-        email_body += f"{t}: {info}\n"
-    email_body += "\nYouTube Transcripts Snippets:\n"
-    for t in transcripts:
-        email_body += f"{t}\n\n"
-
-    # 7. Send email
-    send_email("Daily Trade Ideas", email_body)
+    send_email(email_subject, body)
 
 if __name__ == "__main__":
     main()
