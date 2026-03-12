@@ -4,3 +4,4 @@ praw
 tweepy
 textblob
 youtube-transcript-api
+streamlit
