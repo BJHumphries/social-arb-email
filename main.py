@@ -96,14 +96,19 @@ def main(event=None, context=None):
     # Merge all signals
     all_signals = {}
     for t in TICKERS:
-        all_signals[t] = {**reddit_signals.get(t,{}), **github_signals.get(t,{}),
-                          **tiktok_signals.get(t,{}), **youtube_signals.get(t,{}),
-                          **vc_signals.get(t,{})}
+        all_signals[t] = {
+            **reddit_signals.get(t, {}),
+            **github_signals.get(t, {}),
+            **tiktok_signals.get(t, {}),
+            **youtube_signals.get(t, {}),
+            **vc_signals.get(t, {})
+        }
 
     scored = calculate_score(all_signals)
-    top_tickers = dict(sorted(scored.items(), key=lambda x:x[1]['score'], reverse=True)[:TOP_N])
+    top_tickers = dict(sorted(scored.items(), key=lambda x: x[1]['score'], reverse=True)[:TOP_N])
+
     send_email(top_tickers)
 
-    if __name__ == "__main__":
+
+if __name__ == "__main__":
     main()
-    return "Email process completed!"
