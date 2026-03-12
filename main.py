@@ -3,12 +3,22 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from github import Github
+import requests
+from datetime import datetime
 
 # Environment variables
 EMAIL_FROM = os.getenv("EMAIL_FROM")
 EMAIL_TO = os.getenv("EMAIL_TO")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 GH_TOKEN = os.getenv("GH_TOKEN")
+
+# Example social signal sources (Twitter, Reddit, etc. would need API keys)
+SOCIAL_FEEDS = [
+    "https://api.mock-social-feed.com/stock-signals"  # replace with real API
+]
+
+# Example stock universe
+STOCKS = ["AAPL", "TSLA", "GOOGL", "AMZN", "MSFT"]
 
 def send_email(subject: str, body: str):
     """Send an email via SMTP."""
@@ -27,26 +37,49 @@ def send_email(subject: str, body: str):
     except Exception as e:
         print(f"Failed to send email: {e}")
 
-def get_latest_commit_message(repo_name: str):
-    """Get the latest commit message from the given GitHub repo."""
+def get_social_signal_score(symbol: str) -> float:
+    """Mock function to get a social signal score for a stock."""
+    # Replace with actual API calls (Twitter sentiment, Reddit mentions, etc.)
     try:
-        g = Github(GH_TOKEN)
-        repo = g.get_repo(repo_name)
-        commit = repo.get_commits()[0]
-        return commit.commit.message
+        # response = requests.get(f"https://api.socialsignals.com/{symbol}")
+        # data = response.json()
+        # return data['sentiment_score']
+        import random
+        return round(random.uniform(-1, 1), 2)  # -1 = strong sell, 1 = strong buy
     except Exception as e:
-        print(f"Failed to fetch commit: {e}")
-        return None
+        print(f"Failed to fetch social signal for {symbol}: {e}")
+        return 0
+
+def generate_trade_ideas():
+    """Generate trade ideas using social signals and other criteria."""
+    ideas = []
+
+    for stock in STOCKS:
+        score = get_social_signal_score(stock)
+
+        if score > 0.3:
+            action = "Buy"
+        elif score < -0.3:
+            action = "Sell"
+        else:
+            action = "Hold"
+
+        ideas.append({
+            "symbol": stock,
+            "action": action,
+            "score": score
+        })
+
+    # Format email body
+    body = f"Daily Trade Ideas ({datetime.now().strftime('%Y-%m-%d %H:%M')}):\n\n"
+    for idea in ideas:
+        body += f"{idea['action']} {idea['symbol']} (Score: {idea['score']})\n"
+    return body
 
 def main():
-    repo_name = "BJHumphries/social-arb-email"
-    latest_commit = get_latest_commit_message(repo_name)
-    if latest_commit:
-        subject = f"Latest Commit in {repo_name}"
-        body = f"The latest commit message is:\n\n{latest_commit}"
-        send_email(subject, body)
-    else:
-        print("Could not retrieve the latest commit.")
+    body = generate_trade_ideas()
+    subject = "Daily Trade Ideas (Social Signals)"
+    send_email(subject, body)
 
 if __name__ == "__main__":
     main()
