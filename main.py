@@ -2,168 +2,106 @@ import os
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from github import Github
-import requests
-from datetime import datetime
 from textblob import TextBlob
-from collections import defaultdict
 import yfinance as yf
 from youtube_transcript_api import YouTubeTranscriptApi
+import praw
+import requests
 
 # Environment variables
 EMAIL_FROM = os.getenv("EMAIL_FROM")
 EMAIL_TO = os.getenv("EMAIL_TO")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
-GH_TOKEN = os.getenv("GH_TOKEN")
-YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
-TWITTER_BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN")  # For X API
+REDDIT_CLIENT_ID = os.getenv("REDDIT_CLIENT_ID")
+REDDIT_CLIENT_SECRET = os.getenv("REDDIT_CLIENT_SECRET")
+REDDIT_USER_AGENT = os.getenv("REDDIT_USER_AGENT")
 
-REPO_NAME = "BJHumphries/social-arb-email"
+def fetch_reddit_stock_mentions(subreddit="stocks", limit=10):
+    reddit = praw.Reddit(client_id=REDDIT_CLIENT_ID,
+                         client_secret=REDDIT_CLIENT_SECRET,
+                         user_agent=REDDIT_USER_AGENT)
+    posts = reddit.subreddit(subreddit).hot(limit=limit)
+    mentions = []
+    for post in posts:
+        if '$' in post.title:
+            mentions.append(post.title)
+    return mentions
 
-# --- Email ---
-def send_email(subject: str, body: str):
-    try:
-        msg = MIMEMultipart()
-        msg['From'] = EMAIL_FROM
-        msg['To'] = EMAIL_TO
-        msg['Subject'] = subject
-        msg.attach(MIMEText(body, 'plain'))
-
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-            server.login(EMAIL_FROM, EMAIL_PASSWORD)
-            server.send_message(msg)
-        print("Email sent successfully!")
-    except Exception as e:
-        print(f"Failed to send email: {e}")
-
-# --- GitHub ---
-def get_latest_commit_message(repo_name: str) -> str:
-    try:
-        g = Github(GH_TOKEN)
-        repo = g.get_repo(repo_name)
-        commit = repo.get_commits()[0]
-        return commit.commit.message
-    except Exception as e:
-        print(f"Failed to fetch commit: {e}")
-        return "N/A"
-
-# --- StockTwits ---
-def get_stocktwits_trending_symbols(limit=10):
-    try:
-        resp = requests.get("https://api.stocktwits.com/api/2/trending/symbols.json", timeout=10)
-        data = resp.json()
-        return [item.get("symbol") for item in data.get("symbols", [])[:limit]]
-    except Exception as e:
-        print(f"StockTwits fetch failed: {e}")
-        return []
-
-# --- Reddit ---
-def get_reddit_sentiment(symbol):
-    try:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        url = f"https://www.reddit.com/r/stocks/search.json?q={symbol}&sort=new&limit=10"
-        resp = requests.get(url, headers=headers, timeout=10)
-        posts = resp.json().get("data", {}).get("children", [])
-        score = 0
-        for post in posts:
-            text = post['data'].get('title', '') + " " + post['data'].get('selftext', '')
-            score += TextBlob(text).sentiment.polarity
-        return score / max(1, len(posts))
-    except Exception as e:
-        print(f"Reddit error for {symbol}: {e}")
-        return 0
-
-# --- Twitter/X ---
-def get_twitter_sentiment(symbol):
-    try:
-        headers = {"Authorization": f"Bearer {TWITTER_BEARER_TOKEN}"}
-        url = f"https://api.twitter.com/2/tweets/search/recent?query={symbol}&max_results=10&tweet.fields=text"
-        resp = requests.get(url, headers=headers, timeout=10).json()
-        tweets = resp.get("data", [])
-        score = 0
-        for tweet in tweets:
-            score += TextBlob(tweet.get("text", "")).sentiment.polarity
-        return score / max(1, len(tweets))
-    except Exception as e:
-        print(f"Twitter error for {symbol}: {e}")
-        return 0
-
-# --- YouTube ---
-def get_youtube_sentiment(symbol):
-    try:
-        url = f"https://www.googleapis.com/youtube/v3/search?part=snippet&q={symbol}&type=video&key={YOUTUBE_API_KEY}&maxResults=5"
-        resp = requests.get(url, timeout=10).json()
-        score = 0
-        count = 0
-        for item in resp.get("items", []):
-            video_id = item['id']['videoId']
-            try:
-                transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
-                text = " ".join([t['text'] for t in transcript_list])
-                score += TextBlob(text).sentiment.polarity
-                count += 1
-            except:
-                continue
-        return score / max(1, count)
-    except Exception as e:
-        print(f"YouTube error for {symbol}: {e}")
-        return 0
-
-# --- Trade Aggregator ---
-def generate_trade_ideas():
-    symbols = get_stocktwits_trending_symbols(limit=10)
-    ideas = []
-
-    for symbol in symbols:
-        reddit_score = get_reddit_sentiment(symbol)
-        twitter_score = get_twitter_sentiment(symbol)
-        youtube_score = get_youtube_sentiment(symbol)
-
-        # Optional: include price/volume momentum from yfinance
-        price_score = 0
+def fetch_youtube_transcripts(keywords, max_results=3):
+    transcripts = []
+    for keyword in keywords:
+        # Placeholder: search videos via YouTube API or use saved video IDs
+        # Example with YouTube Data API omitted for brevity
+        video_id = "dQw4w9WgXcQ"  # Replace with real search result
         try:
-            data = yf.Ticker(symbol).history(period="5d")
-            if len(data) >= 2:
-                price_change = (data['Close'][-1] - data['Close'][-2]) / data['Close'][-2]
-                price_score = price_change * 5  # scale
-        except:
-            pass
+            t = YouTubeTranscriptApi.get_transcript(video_id)
+            text = " ".join([x['text'] for x in t])
+            transcripts.append(f"{keyword}:\n{text[:500]}...")  # Limit snippet
+        except Exception as e:
+            transcripts.append(f"{keyword}: Transcript not available")
+    return transcripts
 
-        total_score = reddit_score + twitter_score + youtube_score + price_score
+def analyze_sentiment(texts):
+    analyzed = []
+    for t in texts:
+        blob = TextBlob(t)
+        analyzed.append((t, blob.sentiment.polarity))
+    return analyzed
 
-        if total_score > 0.1:
-            action = "Buy"
-        elif total_score < -0.1:
-            action = "Sell"
-        else:
-            action = "Hold"
+def fetch_stock_data(tickers):
+    data = {}
+    for t in tickers:
+        try:
+            stock = yf.Ticker(t.replace('$',''))
+            info = stock.info
+            data[t] = f"Price: {info.get('currentPrice', 'N/A')}, Change: {info.get('regularMarketChangePercent', 'N/A')}%"
+        except Exception as e:
+            data[t] = "Data unavailable"
+    return data
 
-        ideas.append({
-            "symbol": symbol,
-            "action": action,
-            "score": round(total_score,2),
-            "reddit": round(reddit_score,2),
-            "twitter": round(twitter_score,2),
-            "youtube": round(youtube_score,2),
-            "price": round(price_score,2)
-        })
-    return ideas
+def send_email(subject, body):
+    msg = MIMEMultipart()
+    msg['From'] = EMAIL_FROM
+    msg['To'] = EMAIL_TO
+    msg['Subject'] = subject
+    msg.attach(MIMEText(body, 'plain'))
 
-def format_email_body(ideas, latest_commit):
-    body = f"Daily Trade Ideas ({datetime.now().strftime('%Y-%m-%d %H:%M')}):\n\n"
-    for idea in ideas:
-        body += (f"{idea['action']} {idea['symbol']} | "
-                 f"Score: {idea['score']} "
-                 f"(Reddit: {idea['reddit']}, Twitter: {idea['twitter']}, "
-                 f"YouTube: {idea['youtube']}, Price: {idea['price']})\n")
-    body += f"\nLatest GitHub commit:\n{latest_commit}\n"
-    return body
+    with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+        server.login(EMAIL_FROM, EMAIL_PASSWORD)
+        server.send_message(msg)
+
+    print("Email sent!")
 
 def main():
-    ideas = generate_trade_ideas()
-    latest_commit = get_latest_commit_message(REPO_NAME)
-    body = format_email_body(ideas, latest_commit)
-    send_email("Daily Trade Ideas (Multi-Signal)", body)
+    # 1. Fetch Reddit stock mentions
+    mentions = fetch_reddit_stock_mentions(limit=10)
+
+    # 2. Analyze sentiment
+    sentiment = analyze_sentiment(mentions)
+
+    # 3. Get stock tickers from mentions
+    tickers = [m.split()[0] for m, _ in sentiment if m.startswith('$')]
+
+    # 4. Fetch stock data
+    stock_info = fetch_stock_data(tickers)
+
+    # 5. Fetch YouTube transcripts for tickers
+    transcripts = fetch_youtube_transcripts(tickers)
+
+    # 6. Build email content
+    email_body = "Daily Trade Ideas\n\n"
+    email_body += "Reddit Mentions & Sentiment:\n"
+    for m, s in sentiment:
+        email_body += f"{m} - Sentiment: {s:.2f}\n"
+    email_body += "\nStock Info:\n"
+    for t, info in stock_info.items():
+        email_body += f"{t}: {info}\n"
+    email_body += "\nYouTube Transcripts Snippets:\n"
+    for t in transcripts:
+        email_body += f"{t}\n\n"
+
+    # 7. Send email
+    send_email("Daily Trade Ideas", email_body)
 
 if __name__ == "__main__":
     main()
