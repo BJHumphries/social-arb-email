@@ -2,4 +2,5 @@ requests
 PyGithub
 textblob
 yfinance
+praw
 youtube-transcript-api
