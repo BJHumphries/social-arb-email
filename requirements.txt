@@ -1,5 +1,6 @@
 requests
 PyGithub
-textblob
 praw
+tweepy
+textblob
 youtube-transcript-api
