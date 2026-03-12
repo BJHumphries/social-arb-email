@@ -1,2 +1,5 @@
 requests
 PyGithub
+textblob
+yfinance
+youtube-transcript-api
