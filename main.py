@@ -103,4 +103,7 @@ def main(event=None, context=None):
     scored = calculate_score(all_signals)
     top_tickers = dict(sorted(scored.items(), key=lambda x:x[1]['score'], reverse=True)[:TOP_N])
     send_email(top_tickers)
+
+    if __name__ == "__main__":
+    main()
     return "Email process completed!"
