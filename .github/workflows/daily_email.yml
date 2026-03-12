@@ -25,6 +25,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+          # install all required packages for your script
           pip install requests PyGithub textblob yfinance youtube_transcript_api
 
       # 4. Run main.py
